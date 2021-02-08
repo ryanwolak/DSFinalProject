@@ -1,0 +1,387 @@
+---
+title: "Final Project outline"
+author: "Ian Ogea and Ryan Wolak"
+output: html_document
+---
+
+```{r,include=FALSE}
+library(tidyverse)
+library(Lahman)
+```
+
+```{r,include=FALSE}
+data("Teams")
+glimpse(Teams)
+```
+
+```{r,include=FALSE}
+All_Teams <- Teams%>%
+  filter(1996<= yearID)
+glimpse(All_Teams)
+```
+
+```{r,include=FALSE}
+All_Teams<- All_Teams%>%
+  select(c("yearID","franchID","DivWin","WCWin","R","AB","H","X2B","X3B","HR","BB","SO", "SB","CS","HBP","RA","ER","ERA","CG","SHO","SV","IPouts","HA","HRA","BBA","SOA","E","DP","FP"))
+glimpse(All_Teams)
+```
+
+```{r,include=FALSE}
+All_Teams<-All_Teams%>%
+  mutate(Playoff = ifelse(DivWin=="Y"|WCWin=="Y","Y","N"))
+summary(All_Teams)
+```
+
+### Section 1: Introduction
+Our goal in this project is to accurately predict teams that make the MLB playoffs based off of the statistics in our dataset. 
+The data that we will use to answer this question comes from the Lahman database. Our data includes some basic statistics for each individual season for each major league team since the 1996 season. The statistics include both continuous offensive, pitching, and defensive variables, as well as categorical variables for the season, the team, and whether or not the team made the playoffs.
+
+
+
+### Section 2: Data analysis plan
+
+The models that we plan to use to predict a playoff team are random forests, decision trees and k-nearest neighbors. The dependent variable in our data will be what we called "Playoff". This is a categorical variable that is either Y or N and was mutated from the WCWin and the DIVWin columns. If a team did either one of these things in a season, then they made the playoffs. Our predictor variables will be all of the other variables in the dataset aside from the yearID and the franchID. These variables include:
+
+Variable|Description
+---|---
+`R`|The number of runs the team scored in that year.
+`AB`|The number of at-bats the team had.
+`H`|The number of hits the team had.
+`X2B`|The number of doubles the team hit in the season.
+`X3B`|The number of triples the team hit in the season.
+`HR`|The number of Home Runs the team hit in the season.
+`BB`|The number of base-on-balls (walks) the team took in the season.
+`SO`|The number of times the team's batters struck out during the season. 
+`SB`|The number of bases the team stole during the season.
+`CS`|The number of times the team was caught stealing a base during the season.
+`HBP`|The number of times the team was hit by a pitch during the season.
+`RA`|The number of runs the team allowed their opponents to score during the season.
+`ER`|The number of earned runs the team allowed during the season.
+`CG`|The number of complete games the team pitched during the season.
+`SHO`|The number of times the team shut out their opponents during the season.
+`SV`|The number of saves a team had during the season.
+`IPouts`|The number of outs the team pitched. This is obtained by taking Innings Pitched times three.
+`HA`|The number of hits the team allowed during the season.
+`HRA`|The number of Home Runs allowed during the season.
+`BBA`|The number of batters the team walked during the season.
+`SOA`|The number of batters the team's pitchers struck out during the season.
+`E`|The number of errors the team committed during the season.
+`DP`|The number of double-plays a team turned during the season.
+`FP`|The percentage of plays that the defense successfully completed. 
+
+To begin our project we will need to get to know our data. We will start this by looking at a few of the trends in some of the variables over the 24 years that are included in our dataset.   
+
+```{r,echo=FALSE}
+glimpse(All_Teams)
+#library(mosaic)
+All_Teams %>%
+  ggplot(aes(x = yearID,y = R))+
+  geom_point(aes(color = yearID))+
+  labs(x = 'Year',y = "Runs")+
+  ggtitle("Runs scored by year")+
+  geom_smooth(method = 'lm')
+
+All_Teams %>%
+  group_by(yearID)%>%
+  summarise(meanRuns = mean(R),
+            RunsperGame = mean(R)/162)
+
+```
+
+This scatterplot shows us that the number of runs teams have been scoring has been slightly decreasing over the last 24 years. This means that in order for a team to have been competitive in a year like 2013, they would not have had to score nearly as many runs as they would have had to score in 2000 when scoring was around its peak. The data from the scatterplot is also reflected when looking at the mean number of runs each teamed scored by year. In 2000, the average team scored about 832 runs which equates to over 5.13 runs per game. While in 2013, the average number of runs a team scored was about 675 which means they scored almost a full run less per game at 4.16. 
+
+
+```{r,echo=FALSE}
+All_Teams %>%
+  ggplot(aes(x = yearID, y = HR))+
+  geom_point(aes(color = yearID))+
+  labs(x = "Year", y = "Home Runs")+
+  ggtitle("Home Runs by Year")+
+  geom_smooth(method = 'lm')
+
+All_Teams %>%
+  group_by(yearID)%>%
+  summarise(meanHR = mean(HR))
+```
+
+Another trend that is shown in our data is in the increasing number of home runs each team is hitting every year. In Recent years, there is a drastic increase in the highest home run totals for teams. The average number of home runs for each team was as low as 139 in 2014 and in the 2019 season the average was all the way up to 225. Which is by far the highest it has ever been. 
+
+
+```{r,echo=FALSE}
+All_Teams %>%
+  ggplot(aes(x = yearID,y = SOA))+
+  geom_point(aes(color = yearID))+
+  labs(x = 'Year',y = "Batters Struck Out")+
+  ggtitle("Number of strikeouts by a pitching staff by year")+
+  geom_smooth(method = 'lm')
+All_Teams %>%
+  group_by(yearID)%>%
+  summarise(meanKs = mean(SOA),
+            KperGame = mean(SOA)/162)
+
+```
+
+One of the variables that has the most drastic trend during this time frame is the SOA. At the beginning of our dataset, a team's pitchers were only striking out about 6.5 batters per game and at the end of the dataset team's pitchers were striking out almost 9 batters per game. 
+
+
+
+```{r}
+All_Teams %>%
+  ggplot(aes(x = yearID,y = BB))+
+  geom_point(aes(color = yearID))+
+  labs(x = 'Year',y = "Walks Taken")+
+  ggtitle("Number of Walks Taken by Year")+
+  geom_smooth(method = 'lm')
+All_Teams %>%
+  group_by(yearID)%>%
+  summarise(median = median(BB))
+```
+
+One of the variables that has been decreasing throughout the span of our dataset is BB, the number of walks a team takes. It appears that the number of walks has been decreasing constantly throughout each of the last 25 years. However, much of this decrease could be attributed to the heavy steroid usage in the early 2000s. Over the last 8 or 9 years, there has actually been an increase in the number of walks that teams are taking. This would, of course, correspond directly with the number of batters that teams are walking which is the BBA variable. 
+
+###Models
+
+Now that we have explored our dataset, we can begin to prepare to build our models. The first step of this process is to split our data into training and testing sets. 
+
+```{r}
+set.seed(22)
+#Takes a random sample of rows that is 20% of the length of the All Teams dataset.
+Test_id <- sample(1:nrow(All_Teams),size = round(0.2*nrow(All_Teams)))
+
+#Puts 20% of the rows in the Teams_Test set
+Teams_Test <-All_Teams[Test_id,]
+glimpse(Teams_Test)
+#Puts the other 80% of the rows in the Teams_Training set
+Teams_Training<-All_Teams[-Test_id,]
+glimpse(Teams_Training)
+```
+
+In order to split the data into training and testing, a random sample of 20% of the rows in the dataset is taken and put into the testing set. The other 80% of the rows are left in the training set. This 80/20 train test split leaves us with 573 rows of data in the training set and 143 rows of data in the testing set. 
+
+The first model that we will build is a random forest. Before we can do this, we need to remove any variables that will not be used in a prediction. The identifier variables that need to be removed are: yearID, franchID, DivWin, and WCWin.
+
+```{r}
+# Removes variables that will not be used in the random forest model
+forest_testing<-Teams_Test%>%
+  select(-c("yearID","franchID","DivWin","WCWin"))
+glimpse(forest_testing)
+
+forest_training<-Teams_Training%>%
+  select(-c("yearID","franchID","DivWin","WCWin"))
+glimpse(forest_training)
+```
+
+```{r}
+#loads random forest library
+library(randomForest)
+
+Teams_forest<-randomForest(as.factor(Playoff)~.,data = forest_training, 
+                           ntree = 501, mtry = 3)
+Teams_forest
+```
+
+Our first random forest model that uses 501 decision trees, with each decision tree being allowed three variables is able to correctly predict what a playoff team is about 85.17% of the time. It is able to predict teams that don't make the playoffs almost 94% of the time and teams that do make the playoffs almost 66.27% of the time. It is expected that the model would have an easier time predicting teams that don't make the playoffs than teams that do because there are far more teams in the dataset that did not make the playoffs. 
+
+
+
+```{r}
+importance(Teams_forest) %>%
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  arrange(desc(MeanDecreaseGini))
+```
+
+When looking at the Gini scores for the first random forest model, it is clear that the runs, runs allowed, earned runs average, and earned runs are the four most predictive variables for what makes up a playoff team. However, this only proves the obvious, that if a team scores more runs than their opponent, or gives up less runs than their opponent, they will win more games. 
+
+Because these variables so clearly affect winning, we will now create models without them in order to determine if playoff teams can be predicted using variables that do not directly impact the score of the game. To do this we will first create a random forest model without the variables RA,R,ERA, and ER. We will include saves even though it is quite close in importance to the other variables, because it is not a direct indicator of the number of runs scored in a game. 
+
+```{r}
+#Removes Runs Statistics from training and testing set
+No_Runs_Training<-forest_training %>%
+  select(-c("RA","R","ERA","ER"))
+
+No_Runs_Testing<-forest_testing %>%
+  select(-c("RA","R","ERA","ER"))
+
+glimpse(No_Runs_Training)
+glimpse(No_Runs_Testing)
+```
+
+Now that we have removed the variables that directly involve runs, we can create a random forest model. 
+
+```{r}
+No_Runs_Forest<-randomForest(as.factor(Playoff)~.,data = No_Runs_Training,
+                             ntree = 501,mtry = 3)
+
+No_Runs_Forest
+```
+
+As expected, this random forest model has a higher error rate. The model correctly predicts a teams playoff status about 83.25% of the time. With the increase in error, comes a much higher error rate for predicting that a team is a playoff team. The model only correctly predicts a team that is a playoff team about 61% of the time. 
+
+```{r}
+importance(No_Runs_Forest)%>%
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  arrange(desc(MeanDecreaseGini))
+```
+
+Looking at the random forest model without the stats that directly affect runs, the three most important variables for the success of the model are SV, HA, and BB. These are the variables we will carry over to a decision tree model. We will create two decision trees, one that can use all of the runs statistics: RA, R, ERA, and ER, as well as one that uses SV, HA, BB, BBA.
+
+
+```{r}
+#Loads necessary libraries to create decision trees
+library(rpart)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+no_runs_tree<-rpart(as.factor(Playoff)~SV+HA+BB+BBA,data = forest_training)
+fancyRpartPlot(no_runs_tree)
+```
+
+The decision tree that uses the statistics that don't directly affect runs takes into account all four of the variables that it was allowed. The most extreme non-playoff teams based on the tree are teams that had less than 45 saves, gave up at least 1364 hits, and walked more than 619 batters. This makes sense because a team that does not have many saves is seldom ahead in the later portions of the game, and thus less likely to win. A team in this category has only a 6% chance of making the playoffs using this tree. A team on the other extreme, one that would be very likely to make the playoffs would be a team that has more than 45 saves, walks no more than 531 opposing batters, and takes more than 507 walks. A team in this category would be given an 84% chance of making the playoffs using this model. 
+
+
+```{r}
+runs_tree<-rpart(as.factor(Playoff)~RA+R+ER+ERA,data = forest_training)
+fancyRpartPlot(runs_tree)
+```
+The model that uses the variables that directly affect the number of runs uses all four of the variables it is allowed: RA, R, ER, and ERA. A very good team in this model would be a team that has an ERA lower than 3.9, and scores more than 745 runs in a season. A team like this would make the playoffs 94% of the time using this model. A bad team in this model would be a team that would have an ERA above of 3.9 or higher, and score less than 800 runs. A team like this would miss the playoffs 93% of the time. 
+
+
+```{r}
+#Adds predictions to training dataset
+forest_training<-forest_training %>%
+    mutate(no_runs_tree = predict(no_runs_tree, type='class'),
+           runs_tree= predict(runs_tree,type = 'class'))
+
+```
+
+```{r}
+glimpse(forest_training)
+```
+
+
+Now that we have created both of the decision tree models, we need to find how accurate they are when looking at the training set. To do this, we have to add a prediction column for each of the models. 
+
+
+```{r}
+#loads mosaic library in order to use tally
+library(mosaic)
+
+#Creates confusion matrix for both decision trees 
+confusion_runs <- tally(runs_tree~Playoff,data = forest_training)
+confusion_runs
+sum(diag(confusion_runs))/nrow(forest_training)
+
+confusion_no_runs<-tally(no_runs_tree~Playoff,data = forest_training)
+confusion_no_runs
+sum(diag(confusion_no_runs))/nrow(forest_training)
+```
+
+The accuracy rates of each model are within about 2%. As expected, the model that uses the runs statistics has a higher accuracy rate of about 89.53%, while the model that used the statistics that don't directly affect runs had an accuracy rate of about 87.43%. Both of these models do a better job of predicting teams that make the playoffs than the random forest model did. The runs tree correctly predicted a team that makes the playoffs 127 times out of 169 playoff teams in the training set for a rate of 75.15%. The no runs tree correctly predicted a team that makes the playoffs 129 times out of 169 for a rate of 76.33%.
+
+Now that we have found the accuracy of the decision tree models on our training data set, we need to evaluate how well they work on the testing data set. 
+
+```{r}
+#Creates columns for the prediction of each model in the testing dataset
+forest_testing<-forest_testing %>%
+    mutate(no_runs_tree = predict(no_runs_tree, newdata = forest_testing, type='class'),
+           runs_tree= predict(runs_tree, newdata = forest_testing, type = 'class'))
+
+
+```
+
+
+```{r}
+glimpse(forest_testing)
+```
+
+
+```{r}
+#Creates confusion matrices for both decision trees when looking at the testing set
+confusion_runs_test <- tally(runs_tree~Playoff,data = forest_testing)
+confusion_runs_test
+sum(diag(confusion_runs_test))/nrow(forest_testing)
+
+confusion_no_runs_test<-tally(no_runs_tree~Playoff,data = forest_testing)
+confusion_no_runs_test
+sum(diag(confusion_no_runs_test))/nrow(forest_testing)
+```
+
+Both of the models had a drop in accuracy when testing them on the test set. The runs tree dropped to an accuracy rate of about 84.62% and the no runs tree dropped to an accuracy of about 79.72%. Both models are still correctly predicting a team that makes the playoffs over half the time with the runs tree correctly predicting a team that made the playoffs 26/39 times for a rate of 66.66%. The no runs tree correctly predicted a team that made the playoffs 25/39 times for a rate of 64.10%. 
+
+Now that we have created both random forests and decision trees, we will create a k-nearest neighbors model to compare the accuracy of each models and determine which one best predicts playoff teams. 
+
+The first model that we will create will use the 3-nearest neighbors for all of the numeric variables in our dataset. 
+
+```{r}
+library(class)
+kNN_3<- knn(forest_training[,1:25], test=forest_testing[,1:25], 
+            cl=forest_training$Playoff, k=3, prob=FALSE)
+kNN_3
+
+forest_testing <- forest_testing %>%
+  mutate(Prediction_kNN_3=kNN_3)
+```
+```{r}
+glimpse(forest_testing)
+```
+
+Now that we have created the first k-nearest neighbors model, we need to see how well it did when it was tested on the test set. 
+
+```{r}
+#Creates confusion matrix for kNN model using k=3
+confusion_knn_3<-tally(Playoff~Prediction_kNN_3, data=forest_testing)
+confusion_knn_3
+
+sum(diag(confusion_knn_3))/nrow(forest_testing)
+```
+
+Our first k-nearest neighbors model using k=3 correctly predicted a team's playoff status about 81.11% of the time. Of the 39 playoff teams, the model correctly predicted 27 of them for a rate of 69.23% this is better than either of the decision tree models by about 3%. 
+
+Our next step is to create a couple more k-nearest neighbors models. We will make models using k=10 and k=20 to determine if those are better than our existing models.
+
+```{r}
+#Creates k-nearest neighbors model using k=10
+kNN_10<- knn(forest_training[,1:25], test=forest_testing[,1:25], 
+            cl=forest_training$Playoff, k=10, prob=FALSE)
+kNN_10
+
+forest_testing <- forest_testing %>%
+  mutate(Prediction_kNN_10=kNN_10)
+```
+
+```{r}
+#Creates k-nearest neighbors model using k=20
+kNN_20<- knn(forest_training[,1:25], test=forest_testing[,1:25], 
+            cl=forest_training$Playoff, k=20, prob=FALSE)
+kNN_20
+
+forest_testing <- forest_testing %>%
+  mutate(Prediction_kNN_20=kNN_20)
+```
+
+```{r}
+confusion_knn_10<-tally(Playoff~Prediction_kNN_10, data=forest_testing)
+confusion_knn_10
+sum(diag(confusion_knn_10))/nrow(forest_testing)
+
+confusion_knn_20<-tally(Playoff~Prediction_kNN_20, data=forest_testing)
+confusion_knn_20
+sum(diag(confusion_knn_20))/nrow(forest_testing)
+```
+
+Looking at the confusion matrices for the 10-nearest neighbors model, and the 20-nearest neighbors model, we see that their overall accuracy rates are on either side of the 3-nearest neighbors model. The 10-nearest neighbors model has an overall accuracy rate of about 80.42% and it correctly predicts a team that is a playoff team 24/39 times for a rate of 61.53%. The 20-nearest neighbors model has an overall accuracy rate of about 82.52% and correctly predicts a team that makes the playoffs 22/39 times for a rate of 56.41%. 
+
+Even though the k-nearest neighbors model using k=20 had the highest overall accuracy rate, it was not the best model, because it had the lowest rate of the three kNN models when trying to predict teams that made the playoffs. 
+
+
+### Conclusion and Discussion 
+
+None of our models did an exceptional job of correctly predicting teams that make the playoffs. This is to be expected because there are far more teams in the dataset that did not make the playoffs than teams that did make the playoffs. The model that did the best in our analysis when it was tested on the testing set was the k-nearest neighbors model using k=3. In our testing set that had 39 total teams that made the playoffs, the model correctly predicted 27 of them. It makes sense that a model using a small k value would do well in our analysis because there are so few playoff teams in the dataset. 
+
+Each of the decision tree models that were created had almost the same success rate of correctly predicting playoff teams in our testing set. The decision tree model that used all of the run based statistics (R,RA,ERA,ER) correctly predicted 26 of the 39 playoff teams, and the decision tree model that used statistics that don't directly affect the amount of runs a team scores or gives up, in this case SV,BB,BBA, and HA, correctly predicted 25 out of the 39 playoff teams. These results suggest that there are other valuable statistics to consider besides the number of runs a team scores and the number of runs a team allows throughout a season if the goal is to predict if that team is a playoff team. 
+
+However, as previously stated it is still difficult to predict if a team is a playoff team because there are so few in comparison to the number of teams that miss the playoffs. If we were to continue through with this project, or even if we were to restart the project completely, there are a few things we might consider that we did not before beginning. One thing to consider would be to reframe the question, and instead of trying to predict a team that makes the playoffs, trying to predict a team that wins a certain number of games. The way that teams made the playoffs during the time of this dataset was by either winning their division that is made up of 5 teams, or to be the best or second best team that didn't win their division in their league of 15 teams. While the wildcard does allow many of the good teams who happen to be in the same division as a great team, there have been teams that have won over 90 of their 162 games and missed the playoffs, and there have been teams to only win 82 or 83 of their 162 games and make the playoffs. Reframing the question to try to predict teams that would win a certain number of games would allow our analysis to be more resistant to some of those outliers. It would also allow us to increase the number of years of data that we used. The biggest reason we only used data going back to 1996 is because that was the first full season played with the same playoff format as is currently used. If we were to reframe our question, we would be able to use data going back to 1962 when the mlb began playing a 162 game schedule. 
+
+If we were to put this to practical use in a Major League front office and suggest a new direction for the team, we would likely start with the random forest and its assignment of importance to the variables. One of the great new thought processes to come out of the Moneyball era was to simplify baseball before complicating it. "The goal shouldn't be to buy players, the goal should be to buy wins, and in order to buy wins you need to buy runs". The forest and trees help break down, at its most basic level, the characteristics of a playoff team. As noted above, logically, the top 4 variables all involve the outcome of runs scored. Now, if you were to approach a pro-baseball General Manager and tell him (or her, now) that in order to win more games they need to score more runs, you might not last long in that room. Howeverm there's still value in this information. Much of running a club involves projections and predictions. Before seasons, teams will generally calculate the number of runs they would need to score or prevent in order to expect to reach the postseason. Like the decision tree above, it cannot be definite, and even meeting the 'yes' side of all positive variables isn't a guarantee of success- but it informs decision making. Teams have algorithms that take into account previous performance, trends, patterns and ages of players in order to create projections for their performance next season, so having a decision tree that tells them which statistical values their 25-man rosters need to sum up to allows them to target specific free agents or trade candidates that can get them there. Let's look at a current example for reference. In 60 games this season the Chicago Cubs scored 265 runs while allowing 240. This led them to 34 wins and a division championship. Over a 162 game season the Cubs would've been expected to score 715.5 runs and allow 648. If we were to apply this to our run scoring model, the Cubs would have actually been given a 91% chance to miss the playoffs. Now, of course, this is a cherry picked situation, the definition of small-sample-size, and doesn't discount the credibility or prediction power of the model (someone has to make-up the other 9%) but there is more to examine. 75% of all teams since 1996 had ERAs over 3.9, and the Cubs were at 4.0, which would suggest pitching wasn't the issue. The Cubs struggled mightily on offense last season, and their runs scored per game distribution would've been heavily skewed right, with a handful of umpteen run performances offsetting a disturbing number of shutouts or one-run games. Armed with this model, we would be able to tell the Cubs decision makers that they would need to increase their run count to roughly 800. If they managed to make this increase while holding the other relevant variables constant, their chances of making the playoffs per our model increases from 9% to 94%. Now, of course, telling someone they should have a better offense is one thing, and that's where our other decision tree comes into play. Using the variables or statistics that fall on the periphery of run scoring/winning (contribute to runs indirectly) can give us insights about what type of player we should look for. Cubs pitching was on pace to earn less than 45 saves, and less than 1340 hits over the course of a full-season, so the next decision level is offensive walks. The Cubs were on pace to walk 526 times. Through the model, this would give them a 30% chance of making the playoffs. If they increased that number to 541, our model projects they would make the playoffs 86% of the time. So if the Cubs made a positional upgrade, and found a player that held all other factors equitable in totality, but walked 15 times more than the current player, theoretically that boosts the team's playoff odds. This, however, is the issue with using decision trees alone, because of course the difference between a team with 540 walks and a team with 542 walks isn't a 56% difference in playoff probability, but it does allow for analysis of an inflection or tipping point that teams should target. Which, as noted above, is a limitation of analyzing a categorical Y/N 'make the playoffs' outcome instead of a regression-based prediciton of number of wins, which is more likely employed on a year-to-year basis by MLB front-offices. 
